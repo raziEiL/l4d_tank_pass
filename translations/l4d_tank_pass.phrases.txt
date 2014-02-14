@@ -1,0 +1,24 @@
+"Phrases"
+{
+	"phrase1"
+	{
+		"en"	"Push E button to pass the Tank"
+		"ru"	"Нажмите Е, чтобы передать танка"
+	}
+	"phrase2"
+	{
+		"en"	"The Tank is able to pass until he was fully frustrated once"
+		"ru"	"Танка можно передать на первом контроле"
+	}
+	"phrase3"	
+	{
+		"#format"	"{1:N}"
+		"en"	"You been chosen by {1}"
+		"ru"	"Вы были выбраны игроком {1}"
+	}
+	"phrase4"
+	{
+		"en"	"Who will take the Tank?"
+		"ru"	"Кому передать Танка?"
+	}
+}
