@@ -6,19 +6,22 @@
 #undef REQUIRE_PLUGIN
 #include <l4d_lib>
 
-static IsTankInGame, bool:g_bLockMenu;
+static IsTankInGame, bool:g_bLockMenu, Handle:g_fwdOnTankPass;
 
 public Plugin:myinfo =
 {
-	name = "Tank pass",
-	author = "Scratchy [Laika]",
-	description = "Blocks the way untill all players are loaded",
+	name = "[L4D] Tank pass",
+	author = "Scratchy [Laika] & raziEiL [disawar1]",
+	description = "Allows Tank to pass control to another player",
 	version = "1.0",
 	url = ""
 }
 
 public OnPluginStart()
 {
+	// forward TP_OnTankPass(old_tank, new_tank);
+	g_fwdOnTankPass = CreateGlobalForward("TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell);
+
 	HookEvent("tank_spawn", EventTankSpawn);
 	HookEvent("player_death", EventPlayerDeath);
 	RegConsoleCmd("sm_tankpass", Command_TankPass);
@@ -63,7 +66,7 @@ public Action:hTimer(Handle:timer, any:client)
 
 public Action:OnPlayerRunCmd(client, &buttons)
 {
-	if (IsTankInGame && IsTankInGame == client && buttons & IN_USE && !g_bLockMenu){
+	if (IsTankInGame && IsTankInGame == client && buttons & IN_ZOOM && !g_bLockMenu){
 
 		if (GetClientTeam(client) != 3 || !IsPlayerTank(client)){
 
@@ -96,7 +99,7 @@ public Action:timer(Handle:timer)
 TV_StartTankPass(client)
 {
 	new Handle:hTankVoteMenu = CreateMenu(TV_VoteCallBack), bool:bAnyTarget;
-	SetMenuTitle(hTankVoteMenu, "phrase4");
+	SetMenuTitle(hTankVoteMenu, "%T", "phrase4", client);
 	new String:sName[MAX_NAME_LENGTH], String:sIndex[8];
 	for (new i = 1; i <= MaxClients; i++)
 	{
@@ -120,17 +123,6 @@ public TV_VoteCallBack(Handle:menu, MenuAction:action, param1, param2)
 {
 	switch (action)
 	{
-		case MenuAction_Display:
-		{
-			decl String:title[64];
-			GetMenuTitle(menu, title, sizeof(title));
-
-	 		decl String:buffer[255];
-			FormatEx(buffer, sizeof(buffer), "%T", title, param1);
-
-			new Handle:panel = Handle:param2;
-			SetPanelTitle(panel, buffer);
-		}
 		case MenuAction_Select:
 		{
 			if (IsTankInGame && L4DDirect_GetTankPassedCount() == 1){
@@ -149,6 +141,11 @@ public TV_VoteCallBack(Handle:menu, MenuAction:action, param1, param2)
 					L4DDirect_ReplaceTank(param1, index);
 					L4DDirect_SetTankPassedCount(L4DDirect_GetTankPassedCount() + 1);
 					IsTankInGame = 0;
+
+					Call_StartForward(g_fwdOnTankPass);
+					Call_PushCell(param1);
+					Call_PushCell(index);
+					Call_Finish();
 				}
 			}
 		}
