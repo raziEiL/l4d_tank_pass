@@ -61,7 +61,8 @@ public Action:EventTankSpawn(Handle:h_Event, String:s_Name[], bool:b_DontBroadca
 
 public Action:hTimer(Handle:timer, any:client)
 {
-	PrintHintText(client, "%t", "phrase1");
+	if (IsClientInGame(client))
+		PrintHintText(client, "%t", "phrase1");
 }
 
 public Action:OnPlayerRunCmd(client, &buttons)
