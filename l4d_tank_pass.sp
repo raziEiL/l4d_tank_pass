@@ -16,16 +16,28 @@ public Plugin:myinfo =
 	version = "1.0",
 	url = ""
 }
+static g_iCvarButton;
 
 public OnPluginStart()
 {
 	// forward TP_OnTankPass(old_tank, new_tank);
 	g_fwdOnTankPass = CreateGlobalForward("TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell);
 
+	new Handle:hCvar = CreateConVar("tank_pass_button", "0", "0: Use, 1: Zoom", FCVAR_PLUGIN|FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
+	g_iCvarButton = GetConVarInt(hCvar);
+	HookConVarChange(hCvar, OnConvarChange_Button);
+
 	HookEvent("tank_spawn", EventTankSpawn);
 	HookEvent("player_death", EventPlayerDeath);
 	RegConsoleCmd("sm_tankpass", Command_TankPass);
 	LoadTranslations("l4d_tank_pass.phrases");
+}
+
+public OnConvarChange_Button(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	if (!StrEqual(oldValue, newValue))
+		g_iCvarButton = GetConVarInt(convar);
 }
 
 public Action:Command_TankPass(client, args)
@@ -62,12 +74,12 @@ public Action:EventTankSpawn(Handle:h_Event, String:s_Name[], bool:b_DontBroadca
 public Action:hTimer(Handle:timer, any:client)
 {
 	if (IsClientInGame(client))
-		PrintHintText(client, "%t", "phrase1");
+		PrintHintText(client, "%t", "phrase1", g_iCvarButton == 1 ? "MOUSE3" : "E");
 }
 
 public Action:OnPlayerRunCmd(client, &buttons)
 {
-	if (IsTankInGame && IsTankInGame == client && buttons & IN_ZOOM && !g_bLockMenu){
+	if (IsTankInGame && IsTankInGame == client && buttons & (g_iCvarButton == 1 ? IN_ZOOM : IN_USE) && !g_bLockMenu){
 
 		if (GetClientTeam(client) != 3 || !IsPlayerTank(client)){
 

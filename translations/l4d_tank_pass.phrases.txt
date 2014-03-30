@@ -2,8 +2,8 @@
 {
 	"phrase1"
 	{
-		"en"	"Press MOUSE3 button to pass the Tank"
-		"ru"	"Нажмите MOUSE3, чтобы передать Танка"
+		"en"	"Press %s button to pass the Tank"
+		"ru"	"Нажмите %s, чтобы передать Танка"
 	}
 	"phrase2"
 	{
