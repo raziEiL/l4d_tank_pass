@@ -1,166 +1,329 @@
-#pragma semicolon 1
+#define PLUGIN_VERSION "2.0"
 
+#pragma semicolon 1
+/*
+|--------------------------------------------------------------------------
+| INCLUDES
+|--------------------------------------------------------------------------
+*/
 #include <sourcemod>
 #include <sdktools>
-#include <l4d_direct>
+#include <left4dhooks>
 #undef REQUIRE_PLUGIN
 #include <l4d_lib>
 
-static IsTankInGame, bool:g_bLockMenu, Handle:g_fwdOnTankPass;
-
-public Plugin:myinfo =
+#pragma newdecls required
+/*
+|--------------------------------------------------------------------------
+| MACROS
+|--------------------------------------------------------------------------
+*/
+#define SZF(%0) 	%0, sizeof(%0)
+#define MPS 33 // l4d max players + 1
+#define CID(%0) 	GetClientOfUserId(%0)
+#define UID(%0) 	GetClientUserId(%0)
+/*
+|--------------------------------------------------------------------------
+| VARIABLES
+|--------------------------------------------------------------------------
+*/
+enum
 {
-	name = "[L4D] Tank pass",
+	Validate_Default,
+	Validate_NotiyfyTarget,
+	Validate_SkipTarget
+}
+
+int g_iTankId;
+bool g_bLockMenu;
+GlobalForward g_fwdOnTankPass;
+char g_sCvarCmd[32];
+
+public Plugin myinfo =
+{
+	name = "[L4D & L4D2] Tank Pass",
 	author = "Scratchy [Laika] & raziEiL [disawar1]",
 	description = "Allows Tank to pass control to another player",
-	version = "1.0",
-	url = ""
+	version = PLUGIN_VERSION,
+	url = "https://steamcommunity.com/id/raziEiL/"
 }
-static g_iCvarButton;
 
-public OnPluginStart()
+public void OnPluginStart()
 {
-	// forward TP_OnTankPass(old_tank, new_tank);
-	g_fwdOnTankPass = CreateGlobalForward("TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell);
+	// forward TP_OnTankPass(int old_tank, int new_tank);
+	g_fwdOnTankPass = new GlobalForward("TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell);
 
-	new Handle:hCvar = CreateConVar("tank_pass_button", "0", "0: Use, 1: Zoom", FCVAR_PLUGIN|FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	LoadTranslations("l4d_tank_pass.phrases");
+	LoadTranslations("common.phrases");
 
-	g_iCvarButton = GetConVarInt(hCvar);
-	HookConVarChange(hCvar, OnConvarChange_Button);
+	ConVar cVar = CreateConVar("l4d_tank_pass_exec", "sm_tankhud", "Execute command on client to close 3d party HUD", FCVAR_NOTIFY);
+	cVar.GetString(SZF(g_sCvarCmd));
+	cVar.AddChangeHook(OnCvarChanged_Button);
 
 	HookEvent("tank_spawn", EventTankSpawn);
-	HookEvent("player_death", EventPlayerDeath);
-	RegConsoleCmd("sm_tankpass", Command_TankPass);
-	LoadTranslations("l4d_tank_pass.phrases");
+
+	RegConsoleCmd("sm_tankpass", CmdTankPass);
+	RegAdminCmd("sm_tankfpass", CmdTankFPass, ADMFLAG_ROOT, "sm_tankfpass <#userid|name> - Force to pass control of the Tank to target player");
 }
 
-public OnConvarChange_Button(Handle:convar, const String:oldValue[], const String:newValue[])
+public Action CmdTankPass(int client, int args)
 {
-	if (!StrEqual(oldValue, newValue))
-		g_iCvarButton = GetConVarInt(convar);
-}
+	if (!client)
+		return Plugin_Handled;
 
-public Action:Command_TankPass(client, args)
-{
-	if (IsTankInGame == client)
-		TV_StartTankPass(client);
-}
-
-public OnClientDisconnect(client)
-{
-	if (IsTankInGame == client)
-		IsTankInGame = 0;
-}
-
-public Action:EventPlayerDeath(Handle:h_Event, String:s_Name[], bool:b_DontBroadcast)
-{
-	new tank = GetClientOfUserId(GetEventInt(h_Event, "userid"));
-	if (IsTankInGame == tank) IsTankInGame = 0;
-}
-
-public Action:EventTankSpawn(Handle:h_Event, String:s_Name[], bool:b_DontBroadcast)
-{
-	new tank = GetClientOfUserId(GetEventInt(h_Event, "userid"));
-	if (IsFakeClient(tank))
-	{
-		IsTankInGame = 0;
-		return;
+	if (g_bLockMenu){
+		PrintToChat(client, "%t", "phrase7");
+		return Plugin_Handled;
 	}
-	else IsTankInGame = tank;
-	if (L4DDirect_GetTankPassedCount() != 1) return;
-	CreateTimer(2.0, hTimer, tank);
+	if (ValidateOffer(Validate_SkipTarget, client))
+		TankPassMenu(client);
+	return Plugin_Handled;
 }
 
-public Action:hTimer(Handle:timer, any:client)
+public Action CmdTankFPass(int client, int args)
 {
-	if (IsClientInGame(client))
-		PrintHintText(client, "%t", "phrase1", g_iCvarButton == 1 ? "MOUSE3" : "E");
-}
+	if (client && args){
 
-public Action:OnPlayerRunCmd(client, &buttons)
-{
-	if (IsTankInGame && IsTankInGame == client && buttons & (g_iCvarButton == 1 ? IN_ZOOM : IN_USE) && !g_bLockMenu){
+		char sArg[32], sName[MAX_TARGET_LENGTH];
+		int iTargetList[MPS], iCount;
+		bool bIsML;
+		GetCmdArg(1, SZF(sArg));
 
-		if (GetClientTeam(client) != 3 || !IsPlayerTank(client)){
-
-			IsTankInGame = 0;
-			return Plugin_Continue;
+		if ((iCount = ProcessTargetString(
+			sArg,
+			client,
+			iTargetList,
+			MPS,
+			COMMAND_FILTER_ALIVE,
+			SZF(sName),
+			bIsML)) <= 0){
+			ReplyToTargetError(client, iCount);
+			return Plugin_Handled;
 		}
 
-		if (L4DDirect_GetTankPassedCount() != 1)
-		{
-			IsTankInGame = 0;
-			PrintToChat(client, "%t", "phrase2");
-			return Plugin_Continue;
-		}
+		int tank = GetTank();
 
-		g_bLockMenu = true;
-//		FakeClientCommand(client, "tankhud");
-		CreateTimer(5.0, timer);
-//		if (GetClientMenu(client) == MenuSource_Normal)
-//		FakeClientCommand(client, "tankhud");
-		TV_StartTankPass(client);
+		if (ValidateOffer(Validate_Default, tank, iTargetList[0], client))
+			TankPass(tank, iTargetList[0], true);
 	}
-	return Plugin_Continue;
+	else
+		ReplyToCommand(client, "sm_tankfpass <#userid|name>");
+
+	return Plugin_Handled;
 }
 
-public Action:timer(Handle:timer)
+public Action EventTankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
+	int userId = h_Event.GetInt("userid");
+	int tank = CID(userId);
+
+	PrintToChatAll("tank spawn %N, pass %d", tank, L4D2Direct_GetTankPassedCount());
+
+	if (!IsFakeClient(tank))
+		CreateTimer(1.5, hTimer, userId);
+}
+
+public Action hTimer(Handle timer, any client)
+{
+	client = CID(client);
+	if (!IsValidTank(client) || L4D2Direct_GetTankPassedCount() != 1) return;
+
 	g_bLockMenu = false;
+	PrintToChat(client, "%t", "phrase1");
 }
 
-TV_StartTankPass(client)
+void TankPassMenu(int client)
 {
-	new Handle:hTankVoteMenu = CreateMenu(TV_VoteCallBack), bool:bAnyTarget;
-	SetMenuTitle(hTankVoteMenu, "%T", "phrase4", client);
-	new String:sName[MAX_NAME_LENGTH], String:sIndex[8];
-	for (new i = 1; i <= MaxClients; i++)
-	{
-		if (!IsValidEntity(i) || client == i || !IsClientInGame(i) || GetClientTeam(i) != 3 || IsFakeClient(i)) continue;
+	bool hasTarget;
+	Menu menu = new Menu(MenuHandler);
+	menu.SetTitle("%T", "phrase4", client);
+	char sName[MAX_NAME_LENGTH], sId[12];
+	for (int i; i <= MaxClients; i++){
 
-		bAnyTarget = true;
-		GetClientName(i, sName, MAX_NAME_LENGTH);
-		IntToString(i, sIndex, 8);
-		AddMenuItem(hTankVoteMenu, sIndex, sName);
+		if (client == i || !IsInfected(i) || IsFakeClient(i)) continue;
+
+		hasTarget = true;
+		GetClientName(i, SZF(sName));
+		IntToString(UID(i), SZF(sId));
+		menu.AddItem(sId, sName);
 	}
-	if (!bAnyTarget){
+	if (!hasTarget){
 
-		CloseHandle(hTankVoteMenu);
+		g_bLockMenu = false;
+		delete menu;
 		return;
 	}
-	SetMenuExitButton(hTankVoteMenu, true);
-	DisplayMenu(hTankVoteMenu, client, 10);
+	g_bLockMenu = true;
+	ExecCmd(client);
+	menu.ExitButton = true;
+	menu.Display(client, 10);
 }
 
-public TV_VoteCallBack(Handle:menu, MenuAction:action, param1, param2)
+public int MenuHandler(Menu menu, MenuAction action, int tank, int index)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
-			if (IsTankInGame && L4DDirect_GetTankPassedCount() == 1){
+			char sId[12];
+			menu.GetItem(index, SZF(sId));
+			int target = CID(StringToInt(sId));
 
-				decl String:sIndex[8], String:sName[MAX_NAME_LENGTH];
-				GetMenuItem(menu, param2, sIndex, 8, _, sName, MAX_NAME_LENGTH);
-				new index = StringToInt(sIndex);
-
-				if (index && param1 && IsClientInGame(index) && GetClientTeam(index) == 3 && !IsFakeClient(index) &&
-					IsClientInGame(param1) && GetClientTeam(param1) == 3 && !IsFakeClient(param1) && IsPlayerTank(param1) && IsInfectedAlive(param1) && !IsIncapacitated(param1)){
-
-					if (IsInfectedAlive(index))
-						ForcePlayerSuicide(index);
-
-					PrintToChat(index, "%t", "phrase3", param1);
-					L4DDirect_ReplaceTank(param1, index);
-					L4DDirect_SetTankPassedCount(L4DDirect_GetTankPassedCount() + 1);
-					IsTankInGame = 0;
-
-					Call_StartForward(g_fwdOnTankPass);
-					Call_PushCell(param1);
-					Call_PushCell(index);
-					Call_Finish();
-				}
-			}
+			if (ValidateOffer(Validate_Default, tank, target))
+				OfferMenu(tank, target);
+			else
+				g_bLockMenu = false;
+		}
+		case MenuAction_Cancel:
+		{
+			g_bLockMenu = false;
+		}
+		case MenuAction_End:
+		{
+			delete menu;
 		}
 	}
+}
+
+void OfferMenu(int tank, int target)
+{
+	g_iTankId = UID(tank);
+	ExecCmd(target);
+	char sTemp[64];
+	Menu menu = new Menu(OfferMenuHandler);
+	FormatEx(SZF(sTemp), "%T", "phrase5", target);
+	menu.SetTitle(sTemp);
+	FormatEx(SZF(sTemp), "%T", "Yes", target);
+	FormatEx(SZF(sTemp), "%T", "No", target);
+	menu.AddItem("", sTemp);
+	menu.ExitButton = true;
+	menu.Display(target, 10);
+}
+
+public int OfferMenuHandler(Menu menu, MenuAction action, int target, int index)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			int tank = CID(g_iTankId);
+
+			if (index == 0){
+				if (ValidateOffer(Validate_NotiyfyTarget, tank, target))
+					TankPass(tank, target);
+			}
+			else if (IsValidTank(tank))
+				PrintToChat(tank, "%t", "phrase6");
+		}
+		case MenuAction_Cancel:
+		{
+			int tank = CID(g_iTankId);
+			if (IsValidTank(tank))
+				PrintToChat(tank, "%t", "phrase6");
+		}
+		case MenuAction_End:
+		{
+			g_bLockMenu = false;
+			delete menu;
+		}
+	}
+}
+
+void TankPass(int tank, int target, bool byAdmin = false)
+{
+	if (byAdmin)
+		PrintToTeam(3, 1, "%t", "phrase9", target);
+	else
+		PrintToTeam(3, 1, "%t", "phrase3", tank, target);
+
+	if (IsInfectedAlive(target))
+		ForcePlayerSuicide(target);
+
+	// bugfix
+	float vPos[3], vAng[3];
+	GetClientAbsOrigin(tank, vPos);
+	GetClientAbsAngles(tank, vAng);
+	TeleportEntity(target, vPos, vAng, NULL_VECTOR);
+
+	L4D_ReplaceTank(tank, target);
+	L4D2Direct_SetTankPassedCount(2);
+
+	Call_StartForward(g_fwdOnTankPass);
+	Call_PushCell(tank);
+	Call_PushCell(target);
+	Call_Finish();
+}
+
+void ExecCmd(int client)
+{
+	if (g_sCvarCmd[0] && GetClientMenu(client) == MenuSource_Normal)
+		FakeClientCommand(client, g_sCvarCmd);
+}
+
+int GetTank()
+{
+	for (int i; i <= MaxClients; i++){
+		if (IsValidTank(i))
+			return i;
+	}
+	return 0;
+}
+
+bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, int client = 0)
+{
+	bool hasTarget = validate == Validate_SkipTarget ? true : IsValidTarget(target);
+	bool hasTank = IsValidTank(tank);
+	tank = tank ? tank : client;
+
+	if (!hasTank){
+		if (client)
+			PrintToChat(client, "%t", "phrase7");
+		if (validate == Validate_NotiyfyTarget && hasTarget)
+			PrintToChat(target, "%t", "phrase7");
+		return false;
+	}
+	if (L4D2Direct_GetTankPassedCount() != 1){
+		if (hasTank)
+			PrintToChat(tank, "%t", "phrase2");
+		if (validate == Validate_NotiyfyTarget && hasTarget)
+			PrintToChat(target, "%t", "phrase2");
+		return false;
+	}
+	if (!hasTarget){
+		PrintToChat(tank, "%t", "Player no longer available");
+		return false;
+	}
+	if (IsClientOnFire(tank)){
+		PrintToChat(tank, "%t", "phrase8");
+		if (validate == Validate_NotiyfyTarget)
+			PrintToChat(target, "%t", "phrase8");
+		return false;
+	}
+	return true;
+}
+
+bool IsClientOnFire(int client)
+{
+	return  (GetEntityFlags(client) & FL_ONFIRE) == FL_ONFIRE;
+}
+
+bool IsValidTarget(int target)
+{
+	return IsValid(target) && !IsPlayerTank(target);
+}
+
+bool IsValidTank(int tank)
+{
+	return IsValid(tank) && IsPlayerTank(tank) && IsInfectedAlive(tank) && !IsIncapacitated(tank);
+}
+
+bool IsValid(int client)
+{
+	return IsClient(client) && IsInfected(client) && !IsFakeClient(client);
+}
+
+public void OnCvarChanged_Button(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	if (!StrEqual(oldValue, newValue))
+		convar.GetString(SZF(g_sCvarCmd));
 }

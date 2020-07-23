@@ -2,23 +2,50 @@
 {
 	"phrase1"
 	{
-		"en"	"Press %s button to pass the Tank"
-		"ru"	"Нажмите %s, чтобы передать Танка"
+		"en"	"Type !tankpass to pass the Tank"
+		"ru"	"Напишите !tankpass, чтобы передать Танка"
 	}
 	"phrase2"
 	{
 		"en"	"The Tank is able to pass until he was fully frustrated once"
-		"ru"	"Танка можно передать на первом контроле"
+		"ru"	"Танка можно передать только на первом контроле"
 	}
 	"phrase3"	
 	{
-		"#format"	"{1:N}"
-		"en"	"You been chosen by {1}"
-		"ru"	"Вы были выбраны игроком {1}"
+		"#format"	"{1:N},{2:N}"
+		"en"	"{1} passed the Tank to {2}"
+		"ru"	"{1} передал Танка игроку {2}"
 	}
 	"phrase4"
 	{
 		"en"	"Who will take the Tank?"
 		"ru"	"Кому передать Танка?"
+	}
+	"phrase5"
+	{
+		"en"	"Do you want play the Tank?"
+		"ru"	"Вы хотите сыграть Танком?"
+	}
+	"phrase6"
+	{
+		"#format"	"{1:N}"
+		"en"	"{1} did't agree to be the Tank"
+		"ru"	"{1} не согласился быть Танком"
+	}
+	"phrase7"
+	{
+		"en"	"The Tank is not able to pass right now"
+		"ru"	"Передача Танка сейчас не доступна"
+	}
+	"phrase8"
+	{
+		"en"	"The Tank is able to pass when it's not on fire"
+		"ru"	"Танка можно передать если он не горит"
+	}
+	"phrase9"	
+	{
+		"#format"	"{1:N}"
+		"en"	"An admin has passed the Tank to {1}"
+		"ru"	"Админ передал Танка игроку {1}"
 	}
 }
