@@ -2,19 +2,19 @@
 {
 	"phrase1"
 	{
-		"en"	"Type !tankpass to pass the Tank"
-		"ru"	"Напишите !tankpass, чтобы передать Танка"
+		"en"	"Type !pass to pass the Tank."
+		"ru"	"Напишите !pass, чтобы передать Танка."
 	}
 	"phrase2"
 	{
-		"en"	"The Tank is able to pass until he was fully frustrated once"
-		"ru"	"Танка можно передать только на первом контроле"
+		"en"	"The Tank can be passed before frustration."
+		"ru"	"Танка можно передать только на первом контроле."
 	}
 	"phrase3"	
 	{
-		"#format"	"{1:N},{2:N}"
-		"en"	"{1} passed the Tank to {2}"
-		"ru"	"{1} передал Танка игроку {2}"
+		"#format" "{1:N},{2:N}"
+		"en"	"{1} passed the Tank to {2}"
+		"ru"	"{1} передал Танка игроку {2}"
 	}
 	"phrase4"
 	{
@@ -23,29 +23,44 @@
 	}
 	"phrase5"
 	{
-		"en"	"Do you want play the Tank?"
+		"en"	"Do you want to play the Tank?"
 		"ru"	"Вы хотите сыграть Танком?"
 	}
 	"phrase6"
 	{
-		"#format"	"{1:N}"
-		"en"	"{1} did't agree to be the Tank"
-		"ru"	"{1} не согласился быть Танком"
+		"#format" "{1:N}"
+		"en"	"{1} did't agree to be the Tank."
+		"ru"	"{1} не согласился быть Танком."
 	}
 	"phrase7"
 	{
-		"en"	"The Tank is not able to pass right now"
-		"ru"	"Передача Танка сейчас не доступна"
+		"en"	"The Tank can't be passed right now."
+		"ru"	"Передача Танка сейчас не доступна."
 	}
 	"phrase8"
 	{
-		"en"	"The Tank is able to pass when it's not on fire"
-		"ru"	"Танка можно передать если он не горит"
+		"en"	"The Tank can be passed when not on fire."
+		"ru"	"Танка можно передать если он не горит."
 	}
 	"phrase9"	
 	{
-		"#format"	"{1:N}"
-		"en"	"An admin has passed the Tank to {1}"
-		"ru"	"Админ передал Танка игроку {1}"
+		"#format" "{1:N}"
+		"en"	"An admin has passed the Tank to {1}"
+		"ru"	"Админ передал Танка игроку {1}"
+	}
+	"phrase10"
+	{
+		"en"	"Pass the Tank"
+		"ru"	"Передать контроль Танка"
+	}
+	"phrase11"
+	{
+		"en"	"The Tank can be passed when didn't take any damage."
+		"ru"	"Танка можно передать если он не получил урона."
+	}
+	"phrase12"
+	{
+		"en"	"Take the Tank Bot"
+		"ru"	"Взять Танка бота под контроль"
 	}
 }
