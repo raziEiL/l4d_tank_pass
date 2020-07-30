@@ -4,63 +4,75 @@
 	{
 		"en"	"Type !pass to pass the Tank."
 		"ru"	"Напишите !pass, чтобы передать Танка."
+		"hu"	"Írd be !pass hogy átad a Tankot."
 	}
 	"phrase2"
 	{
 		"en"	"The Tank can be passed before frustration."
 		"ru"	"Танка можно передать только на первом контроле."
+		"hu"	"A Tank átadható frusztráció előtt."
 	}
 	"phrase3"	
 	{
 		"#format" "{1:N},{2:N}"
 		"en"	"{1} passed the Tank to {2}"
 		"ru"	"{1} передал Танка игроку {2}"
+		"hu"	"{1} átadta a Tankot {2}-nak"
 	}
 	"phrase4"
 	{
 		"en"	"Who will take the Tank?"
 		"ru"	"Кому передать Танка?"
+		"hu"	"Ki veszi át a Tankot?"
 	}
 	"phrase5"
 	{
 		"en"	"Do you want to play the Tank?"
 		"ru"	"Вы хотите сыграть Танком?"
+		"hu"	"Szeretnél Tankként játszani?"
 	}
 	"phrase6"
 	{
 		"#format" "{1:N}"
-		"en"	"{1} did't agree to be the Tank."
+		"en"	"{1} didn't agree to be the Tank."
 		"ru"	"{1} не согласился быть Танком."
+		"hu"	"{1} nem egyezett bele hogy Tank lehessen."
 	}
 	"phrase7"
 	{
 		"en"	"The Tank can't be passed right now."
 		"ru"	"Передача Танка сейчас не доступна."
+		"hu"	"A Tank most még nem adható át."
 	}
 	"phrase8"
 	{
 		"en"	"The Tank can be passed when not on fire."
 		"ru"	"Танка можно передать если он не горит."
+		"hu"	"A Tank átadható ha nincs felgyújtva."
 	}
 	"phrase9"	
 	{
 		"#format" "{1:N}"
 		"en"	"An admin has passed the Tank to {1}"
 		"ru"	"Админ передал Танка игроку {1}"
+		"hu"	"Egy admin átadta a tankot {1}-nak"
 	}
 	"phrase10"
 	{
 		"en"	"Pass the Tank"
 		"ru"	"Передать контроль Танка"
+		"hu"	"Add át a Tankot"
 	}
 	"phrase11"
 	{
 		"en"	"The Tank can be passed when didn't take any damage."
 		"ru"	"Танка можно передать если он не получил урона."
+		"hu"	"A Tank átadható ha nem szenved el sebzést."
 	}
 	"phrase12"
 	{
 		"en"	"Take the Tank Bot"
 		"ru"	"Взять Танка бота под контроль"
+		"hu"	"Vedd át a Bot Tankot"
 	}
 }
