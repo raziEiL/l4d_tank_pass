@@ -2,7 +2,7 @@
 {
 	"phrase1"
 	{
-		"en"	"Type !pass to give the tank to another player."
+		"en"	"Type !pass to give the Tank to another player."
 		"ru"	"Напишите !pass, чтобы передать Танка."
 		"hu"	"Írd be !pass hogy átad a Tankot."
 	}
