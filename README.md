@@ -65,6 +65,9 @@ The plugin developed for [Left 4 Dead](http://www.l4d.com/blog/ "Left 4 Dead & L
 If you want to thank me for the hard work feel free to [send any amount](https://www.paypal.me/razicat "send any amount").
 
 ## Changelog:
+v 2.2 (01 Aug 2020)
+ - Blocked sm_pass command on final stages.
+ - Updated translations.
 
 v 2.1 (24 July 2020)
  - Released on alliedmods.net.
