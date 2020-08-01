@@ -64,6 +64,11 @@ The plugin developed for [Left 4 Dead](http://www.l4d.com/blog/ "Left 4 Dead & L
 ## Donation
 If you want to thank me for the hard work feel free to [send any amount](https://www.paypal.me/razicat "send any amount").
 
+## Note:
+1. Multiply Tanks plugins is not supported!
+2. sm_pass command is blocked on final stages due [issue #3](https://github.com/raziEiL/l4d_tank_pass/issues/3).
+
+
 ## Changelog:
 v 2.2 (01 Aug 2020)
  - Blocked sm_pass command on final stages.
