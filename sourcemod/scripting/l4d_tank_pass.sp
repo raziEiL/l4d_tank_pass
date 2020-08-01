@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION "2.1"
+#define PLUGIN_VERSION "2.2"
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -45,7 +45,7 @@ int g_iCvarTankHealth, g_iPassedCount, g_iTankId;
 GlobalForward g_fwdOnTankPass;
 char g_sCvarCmd[32];
 TopMenu g_hTopMenu;
-bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify;
+bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bIsFinal;
 ConVar g_hCvarTankHealth, g_hCvarTankBonusHealth;
 
 public Plugin myinfo =
@@ -104,6 +104,8 @@ public void OnPluginStart()
 	cVar.AddChangeHook(OnCvarChange_Notify);
 
 	HookEvent("tank_spawn", Event_TankSpawn);
+	HookEvent("finale_start", Event_FinalStart, EventHookMode_PostNoCopy);
+	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 
 	RegConsoleCmd("sm_pass", Command_TankPass, "Pass the Tank control to another player.");
 	RegConsoleCmd("sm_tankpass", Command_TankPass, "Pass the Tank control to another player.");
@@ -310,9 +312,19 @@ public Action Command_TakeTank(int client, int args)
 | EVENTS
 |--------------------------------------------------------------------------
 */
+public Action Event_RoundStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+{
+	g_bIsFinal = false;
+}
+
+public Action Event_FinalStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+{
+	g_bIsFinal = true;
+}
+
 public Action Event_TankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
-	if (!g_bCvarNotify) return;
+	if (!g_bCvarNotify || g_bIsFinal) return;
 	int userId = h_Event.GetInt("userid");
 	int tank = CID(userId);
 
@@ -522,9 +534,9 @@ bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, in
 	bool hasTank = IsValidTank(tank);
 	int client = admin ? admin : tank;
 
-	if (!hasTank){
-		if (admin)
-			PrintToChat(admin, "%t", "phrase7");
+	if (!hasTank || g_bIsFinal){
+		if (IsClientAndInGame(client))
+			PrintToChat(client, "%t", "phrase7");
 		if (validate == Validate_NotiyfyTarget && hasTarget)
 			PrintToChat(target, "%t", "phrase7");
 		return false;
