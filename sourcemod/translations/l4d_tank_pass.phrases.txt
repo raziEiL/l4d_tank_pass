@@ -21,7 +21,7 @@
 	}
 	"phrase4"
 	{
-		"en"	"Who will have the Tank?"
+		"en"	"Who will take the Tank?"
 		"ru"	"Кому передать Танка?"
 		"hu"	"Ki veszi át a Tankot?"
 	}
@@ -65,7 +65,7 @@
 	}
 	"phrase11"
 	{
-		"en"	"The Tank can only be passed when it hasn't recieved any damage."
+		"en"	"The Tank can only be passed when it hasn't received any damage."
 		"ru"	"Танка можно передать если он не получил урона."
 		"hu"	"A Tank átadható ha nem szenved el sebzést."
 	}
