@@ -12,7 +12,7 @@
 		"ru"	"Танка можно передать только на первом контроле."
 		"hu"	"A Tank átadható frusztráció előtt."
 	}
-	"phrase3"	
+	"phrase3"
 	{
 		"#format" "{1:N},{2:N}"
 		"en"	"{1} passed the Tank to {2}"
@@ -50,7 +50,7 @@
 		"ru"	"Танка можно передать если он не горит."
 		"hu"	"A Tank átadható ha nincs felgyújtva."
 	}
-	"phrase9"	
+	"phrase9"
 	{
 		"#format" "{1:N}"
 		"en"	"An admin has passed the Tank to {1}"
@@ -74,5 +74,18 @@
 		"en"	"Control Tank Bot"
 		"ru"	"Взять Танка бота под контроль"
 		"hu"	"Vedd át a Bot Tankot"
+	}
+	"phrase13"
+	{
+		"#format" "{1:d},{2:d}"
+		"en"	"The Tank pass limit reached [{1}/{2}]."
+		"ru"	"Достигнут лимит передачи Танка [{1}/{2}]."
+	}
+	"phrase14"
+	{
+		"#format" "{1:N},{2:N},{3:d},{4:d}"
+		"en"	"{1} passed the Tank to {2} [{3}/{4}]."
+		"ru"	"{1} передал Танка игроку {2} [{3}/{4}]."
+		"hu"	"{1} átadta a Tankot {2}-nak [{3}/{4}]."
 	}
 }

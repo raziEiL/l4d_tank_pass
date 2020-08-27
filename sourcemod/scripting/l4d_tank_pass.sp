@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION "2.2"
+#define PLUGIN_VERSION "2.3"
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -18,6 +18,9 @@
 | VARIABLES
 |--------------------------------------------------------------------------
 */
+#define IS_MUST_IGNITE(%1) (%1 && !g_bCvarFire && !g_bCvarExtinguish)
+#define IGNITE(%1) IgniteEntity(%1, 99999.0)
+
 enum
 {
 	Validate_Default,
@@ -32,11 +35,11 @@ enum
 	Menu_Take
 }
 
-int g_iCvarTankHealth, g_iPassedCount, g_iTankId;
+int g_iCvarTankHealth, g_iCvarPassCount, g_iTakeOverPassCount, g_iTankId[MPS], g_iPassCount[MPS];
 GlobalForward g_fwdOnTankPass;
 char g_sCvarCmd[32];
 TopMenu g_hTopMenu;
-bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bIsFinal;
+bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bCvarQuickPass, g_bCvarMenu, g_bIsFinale, g_bIsIgnited[MPS];
 ConVar g_hCvarTankHealth, g_hCvarTankBonusHealth;
 
 public Plugin myinfo =
@@ -87,18 +90,31 @@ public void OnPluginStart()
 	cVar.AddChangeHook(OnCvarChange_Extinguish);
 
 	cVar = CreateConVar("l4d_tank_pass_takeover", "1", "Sets the Tank passed count according convar value when taking control of the Tank AI. If >1 the tank will be replaced with a bot when the his frustration reaches 0.", FCVAR_NOTIFY, true, 1.0, true, 2.0);
-	g_iPassedCount = cVar.IntValue;
+	g_iTakeOverPassCount = cVar.IntValue;
 	cVar.AddChangeHook(OnCvarChange_TakeOver);
 
 	cVar = CreateConVar("l4d_tank_pass_notify", "1", "0=Off, 1=Display pass command info to the Tank through chat messages.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_bCvarNotify = cVar.BoolValue;
 	cVar.AddChangeHook(OnCvarChange_Notify);
 
+	cVar = CreateConVar("l4d_tank_pass_logic", "1", "0=\"X gets Tank\" window, 1=Quick pass except finales", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_bCvarQuickPass = cVar.BoolValue;
+	cVar.AddChangeHook(OnCvarChange_QuickPass);
+
+	cVar = CreateConVar("l4d_tank_pass_menu", "1", "0=Off, 1=Display the menu when the Tank is spawned", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_bCvarMenu = cVar.BoolValue;
+	cVar.AddChangeHook(OnCvarChange_Menu);
+
+	cVar = CreateConVar("l4d_tank_pass_count", "1", "0=Off, >0=The number of times the Tank can be passed by plugin (Frustration counts as pass).", FCVAR_NOTIFY, true, 0.0);
+	g_iCvarPassCount = cVar.IntValue;
+	cVar.AddChangeHook(OnCvarChange_PassCount);
+
 	HookEvent("tank_spawn", Event_TankSpawn);
 	HookEvent("finale_start", Event_FinalStart, EventHookMode_PostNoCopy);
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 
 	RegConsoleCmd("sm_pass", Command_TankPass, "Pass the Tank control to another player.");
+	RegConsoleCmd("sm_passtank", Command_TankPass, "Pass the Tank control to another player.");
 	RegConsoleCmd("sm_tankpass", Command_TankPass, "Pass the Tank control to another player.");
 	RegAdminCmd("sm_forcepass", Command_ForcePass, ADMFLAG_KICK, "sm_forcepass <#userid|name> - Force to pass the Tank to target player.");
 	RegAdminCmd("sm_taketank", Command_TakeTank, ADMFLAG_KICK, "sm_taketank <#userid|name> - Take control of the Tank AI.");
@@ -210,7 +226,7 @@ public int MenuTakeAdmHandler(Menu menu, MenuAction action, int admin, int param
 		{
 			char sId[12];
 			menu.GetItem(param2, SZF(sId));
-			TakeTank(CID(StringToInt(sId)), admin);
+			TakeOverTank(CID(StringToInt(sId)), admin);
 
 			if (g_hTopMenu != null)
 				g_hTopMenu.Display(admin, TopMenuPosition_LastCategory);
@@ -233,8 +249,7 @@ public int MenuTakeAdmHandler(Menu menu, MenuAction action, int admin, int param
 */
 public Action Command_TankPass(int client, int args)
 {
-	if (client && ValidateOffer(Validate_SkipTarget, client))
-		TankPassMenu(client);
+	PreTankPassMenu(client);
 	return Plugin_Handled;
 }
 
@@ -291,7 +306,7 @@ public Action Command_TakeTank(int client, int args)
 			return Plugin_Handled;
 		}
 
-		TakeTank(client, iTargetList[0]);
+		TakeOverTank(client, iTargetList[0]);
 	}
 	else
 		ReplyToCommand(client, "sm_taketank <#userid|name>");
@@ -305,36 +320,59 @@ public Action Command_TakeTank(int client, int args)
 */
 public Action Event_RoundStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
-	g_bIsFinal = false;
+	g_bIsFinale = false;
 }
 
 public Action Event_FinalStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
-	g_bIsFinal = true;
+	g_bIsFinale = true;
 }
 
 public Action Event_TankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
-	if (!g_bCvarNotify || g_bIsFinal) return;
-	int userId = h_Event.GetInt("userid");
-	int tank = CID(userId);
+	if (!g_bCvarNotify) return;
+	int client = CID(h_Event.GetInt("userid"));
 
-	if (!IsFakeClient(tank))
-		CreateTimer(1.5, Timer_TankSpawn, userId);
+	if (IsClientAndInGame(client) && !IsFakeClient(client)){
+		g_iPassCount[client] = 0;
+		g_bIsIgnited[client] = false;
+
+		if (g_bCvarMenu)
+			PreTankPassMenu(client);
+
+		PrintToChat(client, "%t", "phrase1");
+	}
 }
 
-public Action Timer_TankSpawn(Handle timer, any client)
+public void L4D_OnReplaceTank(int tank, int newtank)
+{
+	if (tank == newtank) return;
+	g_iPassCount[tank]++;
+	g_iPassCount[newtank] = g_iPassCount[tank];
+
+	if (g_bIsIgnited[tank])
+		RequestFrame(OnFrameIgnite, UID(newtank));
+
+	g_bIsIgnited[tank] = false;
+}
+
+public void OnFrameIgnite(int client)
 {
 	client = CID(client);
-	if (!IsValidTank(client) || L4D2Direct_GetTankPassedCount() != 1) return;
-
-	PrintToChat(client, "%t", "phrase1");
+	if (IsValidTank(client))
+		IGNITE(client);
 }
 /*
 |--------------------------------------------------------------------------
 | MENU
 |--------------------------------------------------------------------------
 */
+void PreTankPassMenu(int client)
+{
+	if (client && ValidateOffer(Validate_SkipTarget, client))
+		TankPassMenu(client);
+}
+
 void TankPassMenu(int client, int menuType = Menu_Pass)
 {
 	bool hasTarget;
@@ -397,10 +435,10 @@ public int MenuPassHandler(Menu menu, MenuAction action, int tank, int param2)
 		}
 	}
 }
-
+// TODO: pass tankid via menu
 void OfferMenu(int tank, int target)
 {
-	g_iTankId = UID(tank);
+	g_iTankId[target] = UID(tank);
 	ExecCmd(target);
 	char sTemp[64];
 	Menu menu = new Menu(OfferMenuHandler);
@@ -420,7 +458,7 @@ public int OfferMenuHandler(Menu menu, MenuAction action, int target, int param2
 	{
 		case MenuAction_Select:
 		{
-			int tank = CID(g_iTankId);
+			int tank = CID(g_iTankId[target]);
 
 			if (param2 == 0){
 				if (ValidateOffer(Validate_NotiyfyTarget, tank, target))
@@ -431,7 +469,7 @@ public int OfferMenuHandler(Menu menu, MenuAction action, int target, int param2
 		}
 		case MenuAction_Cancel:
 		{
-			int tank = CID(g_iTankId);
+			int tank = CID(g_iTankId[target]);
 			if (IsValidTank(tank))
 				PrintToChat(tank, "%t", "phrase6", target);
 		}
@@ -452,30 +490,48 @@ void TankPass(int tank, int target, int admin = 0)
 		PrintToTeam(3, 0, "%t", "phrase9", target);
 		LogAction(admin, target, "\"%L\" has passed the Tank from \"%L\" to \"%L\"", admin, tank, target);
 	}
-	else
+	else if (g_iCvarPassCount == 1)
 		PrintToTeam(3, 0, "%t", "phrase3", tank, target);
-
-	if (IsInfectedAlive(target) && !IsPlayerGhost(target)){
-
-		if (g_bCvarReplace)
-			L4D_ReplaceWithBot(target);
-
-		ForcePlayerSuicide(target);
-	}
-
-	// bugfix
-	float vPos[3], vAng[3];
-	GetClientAbsOrigin(tank, vPos);
-	GetClientAbsAngles(tank, vAng);
-	TeleportEntity(target, vPos, vAng, NULL_VECTOR);
+	else
+		PrintToTeam(3, 0, "%t", "phrase14", tank, target, g_iPassCount[tank] + 1, g_iCvarPassCount);
 
 	bool isOnFire = IsOnFire(tank);
 
-	L4D_ReplaceTank(tank, target);
-	L4D2Direct_SetTankPassedCount(2);
+	if (g_bIsFinale || !g_bCvarQuickPass){
+		if (IS_MUST_IGNITE(isOnFire))
+			g_bIsIgnited[tank] = true;
 
-	if (isOnFire && !g_bCvarFire && !g_bCvarExtinguish)
-		IgniteEntity(target, 99999.0);
+		if (!g_bCvarReplace && IsInfectedAlive(target) && !IsPlayerGhost(target))
+			ForcePlayerSuicide(target);
+
+		for (int i = 1; i <= MaxClients; i++)
+			if (i != target && IsInfected(i) && !IsFakeClient(i))
+				L4D2Direct_SetTankTickets(i, 0);
+
+		L4D2Direct_SetTankTickets(target, 10000);
+		SetPassCount(tank, true);
+		L4D2Direct_TryOfferingTankBot(tank, false);
+	}
+	else {
+		if (IsInfectedAlive(target) && !IsPlayerGhost(target)){
+
+			if (g_bCvarReplace)
+				L4D_ReplaceWithBot(target);
+
+			ForcePlayerSuicide(target);
+		}
+		// left4dhooks bugfix
+		float vPos[3], vAng[3];
+		GetClientAbsOrigin(tank, vPos);
+		GetClientAbsAngles(tank, vAng);
+		TeleportEntity(target, vPos, vAng, NULL_VECTOR);
+
+		SetPassCount(tank);
+		L4D_ReplaceTank(tank, target);
+
+		if (IS_MUST_IGNITE(isOnFire))
+			IGNITE(target);
+	}
 
 	Call_StartForward(g_fwdOnTankPass);
 	Call_PushCell(tank);
@@ -483,16 +539,23 @@ void TankPass(int tank, int target, int admin = 0)
 	Call_Finish();
 }
 
-void TakeTank(int admin, int target)
+void TakeOverTank(int admin, int target)
 {
 	int tank = GetTankBot();
 
 	if (tank && IsValidTarget(target)){
 		L4D_TakeOverZombieBot(target, tank);
-		L4D2Direct_SetTankPassedCount(g_iPassedCount);
+		L4D2Direct_SetTankPassedCount(g_iTakeOverPassCount);
 	}
 	else
 		PrintToChat(admin, "%t", "Player no longer available");
+}
+
+void SetPassCount(int tank, bool offer = false)
+{
+	int count = (g_iPassCount[tank] + 1) >= g_iCvarPassCount ? 2 : 1;
+	if (offer) count--;
+	L4D2Direct_SetTankPassedCount(count);
 }
 
 void ExecCmd(int client)
@@ -525,18 +588,26 @@ bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, in
 	bool hasTank = IsValidTank(tank);
 	int client = admin ? admin : tank;
 
-	if (!hasTank || g_bIsFinal){
+	if (!hasTank){
 		if (IsClientAndInGame(client))
 			PrintToChat(client, "%t", "phrase7");
 		if (validate == Validate_NotiyfyTarget && hasTarget)
 			PrintToChat(target, "%t", "phrase7");
 		return false;
 	}
-	if (L4D2Direct_GetTankPassedCount() != 1){
-		if (hasTank)
-			PrintToChat(client, "%t", "phrase2");
-		if (validate == Validate_NotiyfyTarget && hasTarget)
-			PrintToChat(target, "%t", "phrase2");
+	if (g_iPassCount[tank] >= g_iCvarPassCount){
+		if (hasTank){
+			if (g_iCvarPassCount == 1)
+				PrintToChat(client, "%t", "phrase2");
+			else
+				PrintToChat(client, "%t", "phrase13", g_iPassCount[tank], g_iCvarPassCount);
+		}
+		if (validate == Validate_NotiyfyTarget && hasTarget){
+			if (g_iCvarPassCount == 1)
+				PrintToChat(client, "%t", "phrase2");
+			else
+				PrintToChat(client, "%t", "phrase13", g_iPassCount[tank], g_iCvarPassCount);
+		}
 		return false;
 	}
 	if (!hasTarget){
@@ -620,7 +691,7 @@ public void OnCvarChange_Extinguish(ConVar convar, const char[] oldValue, const 
 public void OnCvarChange_TakeOver(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	if (!StrEqual(oldValue, newValue))
-		g_iPassedCount = convar.IntValue;
+		g_iTakeOverPassCount = convar.IntValue;
 }
 
 public void OnCvarChange_TankHealth(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -638,4 +709,22 @@ public void OnCvarChange_Notify(ConVar convar, const char[] oldValue, const char
 {
 	if (!StrEqual(oldValue, newValue))
 		g_bCvarNotify = convar.BoolValue;
+}
+
+public void OnCvarChange_QuickPass(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	if (!StrEqual(oldValue, newValue))
+		g_bCvarQuickPass = convar.BoolValue;
+}
+
+public void OnCvarChange_Menu(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	if (!StrEqual(oldValue, newValue))
+		g_bCvarMenu = convar.BoolValue;
+}
+
+public void OnCvarChange_PassCount(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	if (!StrEqual(oldValue, newValue))
+		g_iCvarPassCount = convar.IntValue;
 }
