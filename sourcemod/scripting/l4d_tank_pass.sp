@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION "2.3"
+#define PLUGIN_VERSION "2.4"
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -35,11 +35,11 @@ enum
 	Menu_Take
 }
 
-int g_iCvarTankHealth, g_iCvarPassCount, g_iTakeOverPassCount, g_iTankId[MPS], g_iPassCount[MPS];
+int g_iCvarTankHealth, g_iCvarPassedCount, g_iTakeOverPassedCount, g_iTankId[MPS], g_iPassedCount[MPS];
 GlobalForward g_fwdOnTankPass;
 char g_sCvarCmd[32];
 TopMenu g_hTopMenu;
-bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bCvarQuickPass, g_bCvarMenu, g_bIsFinale, g_bIsIgnited[MPS];
+bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bCvarQuickPass, g_bCvarMenu, g_bIsFinale, g_bIsIgnited[MPS], g_bIsBlocked[MPS];
 ConVar g_hCvarTankHealth, g_hCvarTankBonusHealth;
 
 public Plugin myinfo =
@@ -90,7 +90,7 @@ public void OnPluginStart()
 	cVar.AddChangeHook(OnCvarChange_Extinguish);
 
 	cVar = CreateConVar("l4d_tank_pass_takeover", "1", "Sets the Tank passed count according convar value when taking control of the Tank AI. If >1 the tank will be replaced with a bot when the his frustration reaches 0.", FCVAR_NOTIFY, true, 1.0, true, 2.0);
-	g_iTakeOverPassCount = cVar.IntValue;
+	g_iTakeOverPassedCount = cVar.IntValue;
 	cVar.AddChangeHook(OnCvarChange_TakeOver);
 
 	cVar = CreateConVar("l4d_tank_pass_notify", "1", "0=Off, 1=Display pass command info to the Tank through chat messages.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
@@ -106,12 +106,15 @@ public void OnPluginStart()
 	cVar.AddChangeHook(OnCvarChange_Menu);
 
 	cVar = CreateConVar("l4d_tank_pass_count", "1", "0=Off, >0=The number of times the Tank can be passed by plugin (Frustration counts as pass).", FCVAR_NOTIFY, true, 0.0);
-	g_iCvarPassCount = cVar.IntValue;
+	g_iCvarPassedCount = cVar.IntValue;
 	cVar.AddChangeHook(OnCvarChange_PassCount);
 
 	HookEvent("tank_spawn", Event_TankSpawn);
 	HookEvent("finale_start", Event_FinalStart, EventHookMode_PostNoCopy);
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+	HookEvent("entity_killed", Event_EntityKilled);
+	HookEvent("player_bot_replace", Event_PlayerBotReplace);
+	HookEvent("bot_player_replace", Event_BotPlayerReplace);
 
 	RegConsoleCmd("sm_pass", Command_TankPass, "Pass the Tank control to another player.");
 	RegConsoleCmd("sm_passtank", Command_TankPass, "Pass the Tank control to another player.");
@@ -249,7 +252,8 @@ public int MenuTakeAdmHandler(Menu menu, MenuAction action, int admin, int param
 */
 public Action Command_TankPass(int client, int args)
 {
-	PreTankPassMenu(client);
+	if (!g_bIsBlocked[client])
+		PreTankPassMenu(client);
 	return Plugin_Handled;
 }
 
@@ -318,24 +322,51 @@ public Action Command_TakeTank(int client, int args)
 | EVENTS
 |--------------------------------------------------------------------------
 */
-public Action Event_RoundStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+public void OnClientPutInServer(int client)
 {
+	if (client)
+		ResetPassData(client);
+}
+
+public void Event_RoundStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+{
+	for (int i = 1; i <= MaxClients; i++)
+		ResetPassData(i);
 	g_bIsFinale = false;
 }
 
-public Action Event_FinalStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+public void Event_FinalStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
 	g_bIsFinale = true;
 }
 
-public Action Event_TankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+public void Event_TankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
-	if (!g_bCvarNotify) return;
 	int client = CID(h_Event.GetInt("userid"));
 
 	if (IsClientAndInGame(client) && !IsFakeClient(client)){
-		g_iPassCount[client] = 0;
-		g_bIsIgnited[client] = false;
+		PrintToChatAll("Event_TankSpawn %d %N", client, client);
+		ResetPassData(client);
+		if (!g_bCvarNotify) return;
+
+		g_bIsBlocked[client] = true;
+		DataPack pack;
+		CreateDataTimer(0.2, Timer_Notify, pack); // waiting for bot_player_replace fired
+		pack.WriteCell(UID(client));
+		pack.WriteCell(client);
+	}
+}
+
+public Action Timer_Notify(Handle timer, DataPack pack)
+{
+	pack.Reset();
+	int userId = pack.ReadCell();
+	int client = pack.ReadCell();
+
+	g_bIsBlocked[client] = false;
+	client = CID(userId);
+
+	if (IsAllowToPass(client) && IsValidTank(client)){
 
 		if (g_bCvarMenu)
 			PreTankPassMenu(client);
@@ -344,16 +375,67 @@ public Action Event_TankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast
 	}
 }
 
+public void Event_EntityKilled(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+{
+	int entity = h_Event.GetInt("entindex_killed");
+	if (IsClient(entity) && IsPlayerTank(entity)){
+		RequestFrame(OnEntKilled, entity);
+	}
+}
+
+public void OnEntKilled(int client)
+{
+	if (!IsAliveTank(client)){
+		ResetPassData(client);
+		PrintToChatAll("tank killed %d", client);
+	}	
+}
+
+public void Event_PlayerBotReplace(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+{
+	int client = CID(h_Event.GetInt("player"));
+	if (!g_iPassedCount[client]) return;
+	int bot = CID(h_Event.GetInt("bot"));
+	
+	if (IsReplaceableTank(bot, client)){
+		TransferPass(client, bot);
+		PrintToChatAll("%d %N tank %d, %d %N tank %d", client, client, IsPlayerTank(client), bot, bot, IsPlayerTank(bot));
+	}
+}
+
+// fired after tank_spawn
+public void Event_BotPlayerReplace(Event h_Event, char[] s_Name, bool b_DontBroadcast)
+{
+	int bot = CID(h_Event.GetInt("bot"));
+	if (!g_iPassedCount[bot]) return;
+	int client = CID(h_Event.GetInt("player"));
+
+	if (IsReplaceableTank(bot, client)){
+		TransferPass(bot, client, false);
+		PrintToChatAll("takeover: %d %N tank %d, %d %N tank %d", client, client, IsPlayerTank(client), bot, bot, IsPlayerTank(bot));
+	}
+}
+
 public void L4D_OnReplaceTank(int tank, int newtank)
 {
+	OnReplaceTank(tank, newtank);
+}
+
+// support left4downtown, nyx extension 
+public Action L4D2_OnReplaceTank(int tank, int newtank)
+{
+	OnReplaceTank(tank, newtank);
+	return Plugin_Continue;
+}
+
+void OnReplaceTank(int tank, int newtank)
+{
 	if (tank == newtank) return;
-	g_iPassCount[tank]++;
-	g_iPassCount[newtank] = g_iPassCount[tank];
 
 	if (g_bIsIgnited[tank])
 		RequestFrame(OnFrameIgnite, UID(newtank));
 
-	g_bIsIgnited[tank] = false;
+	TransferPass(tank, newtank);
 }
 
 public void OnFrameIgnite(int client)
@@ -490,10 +572,10 @@ void TankPass(int tank, int target, int admin = 0)
 		PrintToTeam(3, 0, "%t", "phrase9", target);
 		LogAction(admin, target, "\"%L\" has passed the Tank from \"%L\" to \"%L\"", admin, tank, target);
 	}
-	else if (g_iCvarPassCount == 1)
+	else if (g_iCvarPassedCount == 1)
 		PrintToTeam(3, 0, "%t", "phrase3", tank, target);
 	else
-		PrintToTeam(3, 0, "%t", "phrase14", tank, target, g_iPassCount[tank] + 1, g_iCvarPassCount);
+		PrintToTeam(3, 0, "%t", "phrase14", tank, target, g_iPassedCount[tank] + 1, g_iCvarPassedCount);
 
 	bool isOnFire = IsOnFire(tank);
 
@@ -545,7 +627,7 @@ void TakeOverTank(int admin, int target)
 
 	if (tank && IsValidTarget(target)){
 		L4D_TakeOverZombieBot(target, tank);
-		L4D2Direct_SetTankPassedCount(g_iTakeOverPassCount);
+		L4D2Direct_SetTankPassedCount(g_iTakeOverPassedCount);
 	}
 	else
 		PrintToChat(admin, "%t", "Player no longer available");
@@ -553,9 +635,27 @@ void TakeOverTank(int admin, int target)
 
 void SetPassCount(int tank, bool offer = false)
 {
-	int count = (g_iPassCount[tank] + 1) >= g_iCvarPassCount ? 2 : 1;
+	int count = (g_iPassedCount[tank] + 1) >= g_iCvarPassedCount ? 2 : 1;
 	if (offer) count--;
 	L4D2Direct_SetTankPassedCount(count);
+}
+
+void TransferPass(int tank, int newtank, bool count = true)
+{
+	if (count)
+		g_iPassedCount[tank]++;
+
+	if (g_iPassedCount[tank] > g_iCvarPassedCount)
+		g_iPassedCount[tank] = g_iCvarPassedCount;
+
+	g_iPassedCount[newtank] = g_iPassedCount[tank];
+	ResetPassData(tank);
+}
+
+void ResetPassData(int client)
+{
+	g_iPassedCount[client] = 0;
+	g_bIsIgnited[client] = false;
 }
 
 void ExecCmd(int client)
@@ -595,18 +695,18 @@ bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, in
 			PrintToChat(target, "%t", "phrase7");
 		return false;
 	}
-	if (g_iPassCount[tank] >= g_iCvarPassCount){
+	if (!IsAllowToPass(tank)){
 		if (hasTank){
-			if (g_iCvarPassCount == 1)
+			if (g_iCvarPassedCount == 1)
 				PrintToChat(client, "%t", "phrase2");
 			else
-				PrintToChat(client, "%t", "phrase13", g_iPassCount[tank], g_iCvarPassCount);
+				PrintToChat(client, "%t", "phrase13", g_iPassedCount[tank], g_iCvarPassedCount);
 		}
 		if (validate == Validate_NotiyfyTarget && hasTarget){
-			if (g_iCvarPassCount == 1)
+			if (g_iCvarPassedCount == 1)
 				PrintToChat(client, "%t", "phrase2");
 			else
-				PrintToChat(client, "%t", "phrase13", g_iPassCount[tank], g_iCvarPassCount);
+				PrintToChat(client, "%t", "phrase13", g_iPassedCount[tank], g_iCvarPassedCount);
 		}
 		return false;
 	}
@@ -629,6 +729,16 @@ bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, in
 	return true;
 }
 
+bool IsAllowToPass(int tank)
+{
+	return g_iPassedCount[tank] < g_iCvarPassedCount;
+}
+
+bool IsReplaceableTank(int client, int bot)
+{
+	return IsClient(client) && IsClient(bot) && IsTank(client) && IsTank(bot);
+}
+
 bool IsValidTarget(int target)
 {
 	return IsValid(target) && !IsPlayerTank(target);
@@ -646,7 +756,12 @@ bool IsValidTankBot(int tank)
 
 bool IsAliveTank(int tank)
 {
-	return IsPlayerTank(tank) && IsInfectedAlive(tank) && !IsIncapacitated(tank);
+	return IsTank(tank) && IsInfectedAlive(tank);
+}
+
+bool IsTank(int tank)
+{
+	return IsPlayerTank(tank) && !IsIncapacitated(tank);
 }
 
 bool IsValid(int client)
@@ -691,7 +806,7 @@ public void OnCvarChange_Extinguish(ConVar convar, const char[] oldValue, const 
 public void OnCvarChange_TakeOver(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	if (!StrEqual(oldValue, newValue))
-		g_iTakeOverPassCount = convar.IntValue;
+		g_iTakeOverPassedCount = convar.IntValue;
 }
 
 public void OnCvarChange_TankHealth(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -726,5 +841,5 @@ public void OnCvarChange_Menu(ConVar convar, const char[] oldValue, const char[]
 public void OnCvarChange_PassCount(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	if (!StrEqual(oldValue, newValue))
-		g_iCvarPassCount = convar.IntValue;
+		g_iCvarPassedCount = convar.IntValue;
 }
