@@ -247,6 +247,123 @@ public int MenuTakeAdmHandler(Menu menu, MenuAction action, int admin, int param
 }
 /*
 |--------------------------------------------------------------------------
+| MENU
+|--------------------------------------------------------------------------
+*/
+void PreTankPassMenu(int client)
+{
+	if (client && ValidateOffer(Validate_SkipTarget, client))
+		TankPassMenu(client);
+}
+
+void TankPassMenu(int client, int menuType = Menu_Pass)
+{
+	bool hasTarget;
+	Menu menu;
+
+	switch (menuType)
+	{
+		case Menu_Pass:
+			menu = new Menu(MenuPassHandler);
+		case Menu_ForcePass:
+			menu = new Menu(MenuForceAdmHandler);
+		case Menu_Take:
+			menu = new Menu(MenuTakeAdmHandler);
+	}
+
+	menu.SetTitle("%T", "phrase4", client);
+	char sName[MAX_NAME_LENGTH], sId[12];
+	for (int i = 1; i <= MaxClients; i++){
+
+		if (!IsInfected(i) || IsFakeClient(i) || IsPlayerTank(i)) continue;
+
+		hasTarget = true;
+		GetClientName(i, SZF(sName));
+		IntToString(UID(i), SZF(sId));
+		menu.AddItem(sId, sName);
+	}
+	if (!hasTarget){
+
+		PrintToChat(client, "%t", "phrase7");
+		delete menu;
+		return;
+	}
+	if (menuType == Menu_Pass){
+		ExecCmd(client);
+		menu.ExitButton = true;
+		menu.Display(client, 10);
+	}
+	else {
+		menu.ExitBackButton = true;
+		menu.Display(client, MENU_TIME_FOREVER);
+	}
+}
+
+public int MenuPassHandler(Menu menu, MenuAction action, int tank, int param2)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			char sId[12];
+			menu.GetItem(param2, SZF(sId));
+			int target = CID(StringToInt(sId));
+
+			if (ValidateOffer(Validate_Default, tank, target))
+				OfferMenu(tank, target);
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+}
+// TODO: pass tankid via menu
+void OfferMenu(int tank, int target)
+{
+	g_iTankId[target] = UID(tank);
+	ExecCmd(target);
+	char sTemp[64];
+	Menu menu = new Menu(OfferMenuHandler);
+	FormatEx(SZF(sTemp), "%T", "phrase5", target);
+	menu.SetTitle(sTemp);
+	FormatEx(SZF(sTemp), "%T", "Yes", target);
+	menu.AddItem("", sTemp);
+	FormatEx(SZF(sTemp), "%T", "No", target);
+	menu.AddItem("", sTemp);
+	menu.ExitButton = true;
+	menu.Display(target, 10);
+}
+
+public int OfferMenuHandler(Menu menu, MenuAction action, int target, int param2)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			int tank = CID(g_iTankId[target]);
+
+			if (param2 == 0){
+				if (ValidateOffer(Validate_NotiyfyTarget, tank, target))
+					TankPass(tank, target);
+			}
+			else if (IsValidTank(tank))
+				PrintToChat(tank, "%t", "phrase6", target);
+		}
+		case MenuAction_Cancel:
+		{
+			int tank = CID(g_iTankId[target]);
+			if (IsValidTank(tank))
+				PrintToChat(tank, "%t", "phrase6", target);
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+}
+/*
+|--------------------------------------------------------------------------
 | COMMANDS
 |--------------------------------------------------------------------------
 */
@@ -443,123 +560,6 @@ public void OnFrameIgnite(int client)
 	client = CID(client);
 	if (IsValidTank(client))
 		IGNITE(client);
-}
-/*
-|--------------------------------------------------------------------------
-| MENU
-|--------------------------------------------------------------------------
-*/
-void PreTankPassMenu(int client)
-{
-	if (client && ValidateOffer(Validate_SkipTarget, client))
-		TankPassMenu(client);
-}
-
-void TankPassMenu(int client, int menuType = Menu_Pass)
-{
-	bool hasTarget;
-	Menu menu;
-
-	switch (menuType)
-	{
-		case Menu_Pass:
-			menu = new Menu(MenuPassHandler);
-		case Menu_ForcePass:
-			menu = new Menu(MenuForceAdmHandler);
-		case Menu_Take:
-			menu = new Menu(MenuTakeAdmHandler);
-	}
-
-	menu.SetTitle("%T", "phrase4", client);
-	char sName[MAX_NAME_LENGTH], sId[12];
-	for (int i = 1; i <= MaxClients; i++){
-
-		if (!IsInfected(i) || IsFakeClient(i) || IsPlayerTank(i)) continue;
-
-		hasTarget = true;
-		GetClientName(i, SZF(sName));
-		IntToString(UID(i), SZF(sId));
-		menu.AddItem(sId, sName);
-	}
-	if (!hasTarget){
-
-		PrintToChat(client, "%t", "phrase7");
-		delete menu;
-		return;
-	}
-	if (menuType == Menu_Pass){
-		ExecCmd(client);
-		menu.ExitButton = true;
-		menu.Display(client, 10);
-	}
-	else {
-		menu.ExitBackButton = true;
-		menu.Display(client, MENU_TIME_FOREVER);
-	}
-}
-
-public int MenuPassHandler(Menu menu, MenuAction action, int tank, int param2)
-{
-	switch (action)
-	{
-		case MenuAction_Select:
-		{
-			char sId[12];
-			menu.GetItem(param2, SZF(sId));
-			int target = CID(StringToInt(sId));
-
-			if (ValidateOffer(Validate_Default, tank, target))
-				OfferMenu(tank, target);
-		}
-		case MenuAction_End:
-		{
-			delete menu;
-		}
-	}
-}
-// TODO: pass tankid via menu
-void OfferMenu(int tank, int target)
-{
-	g_iTankId[target] = UID(tank);
-	ExecCmd(target);
-	char sTemp[64];
-	Menu menu = new Menu(OfferMenuHandler);
-	FormatEx(SZF(sTemp), "%T", "phrase5", target);
-	menu.SetTitle(sTemp);
-	FormatEx(SZF(sTemp), "%T", "Yes", target);
-	menu.AddItem("", sTemp);
-	FormatEx(SZF(sTemp), "%T", "No", target);
-	menu.AddItem("", sTemp);
-	menu.ExitButton = true;
-	menu.Display(target, 10);
-}
-
-public int OfferMenuHandler(Menu menu, MenuAction action, int target, int param2)
-{
-	switch (action)
-	{
-		case MenuAction_Select:
-		{
-			int tank = CID(g_iTankId[target]);
-
-			if (param2 == 0){
-				if (ValidateOffer(Validate_NotiyfyTarget, tank, target))
-					TankPass(tank, target);
-			}
-			else if (IsValidTank(tank))
-				PrintToChat(tank, "%t", "phrase6", target);
-		}
-		case MenuAction_Cancel:
-		{
-			int tank = CID(g_iTankId[target]);
-			if (IsValidTank(tank))
-				PrintToChat(tank, "%t", "phrase6", target);
-		}
-		case MenuAction_End:
-		{
-			delete menu;
-		}
-	}
 }
 /*
 |--------------------------------------------------------------------------
