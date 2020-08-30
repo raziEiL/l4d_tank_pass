@@ -462,7 +462,6 @@ public void Event_TankSpawn(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 	int client = CID(h_Event.GetInt("userid"));
 
 	if (IsClientAndInGame(client) && !IsFakeClient(client)){
-		PrintToChatAll("Event_TankSpawn %d %N", client, client);
 		ResetPassData(client);
 		if (!g_bCvarNotify) return;
 
@@ -495,17 +494,14 @@ public Action Timer_Notify(Handle timer, DataPack pack)
 public void Event_EntityKilled(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
 	int entity = h_Event.GetInt("entindex_killed");
-	if (IsClient(entity) && IsPlayerTank(entity)){
+	if (IsClient(entity) && IsPlayerTank(entity))
 		RequestFrame(OnEntKilled, entity);
-	}
 }
 
 public void OnEntKilled(int client)
 {
-	if (!IsAliveTank(client)){
+	if (!IsAliveTank(client))
 		ResetPassData(client);
-		PrintToChatAll("tank killed %d", client);
-	}	
 }
 
 public void Event_PlayerBotReplace(Event h_Event, char[] s_Name, bool b_DontBroadcast)
@@ -514,10 +510,8 @@ public void Event_PlayerBotReplace(Event h_Event, char[] s_Name, bool b_DontBroa
 	if (!g_iPassedCount[client]) return;
 	int bot = CID(h_Event.GetInt("bot"));
 	
-	if (IsReplaceableTank(bot, client)){
+	if (IsReplaceableTank(bot, client))
 		TransferPass(client, bot);
-		PrintToChatAll("%d %N tank %d, %d %N tank %d", client, client, IsPlayerTank(client), bot, bot, IsPlayerTank(bot));
-	}
 }
 
 // fired after tank_spawn
@@ -527,10 +521,8 @@ public void Event_BotPlayerReplace(Event h_Event, char[] s_Name, bool b_DontBroa
 	if (!g_iPassedCount[bot]) return;
 	int client = CID(h_Event.GetInt("player"));
 
-	if (IsReplaceableTank(bot, client)){
+	if (IsReplaceableTank(bot, client))
 		TransferPass(bot, client, false);
-		PrintToChatAll("takeover: %d %N tank %d, %d %N tank %d", client, client, IsPlayerTank(client), bot, bot, IsPlayerTank(bot));
-	}
 }
 
 public void L4D_OnReplaceTank(int tank, int newtank)
