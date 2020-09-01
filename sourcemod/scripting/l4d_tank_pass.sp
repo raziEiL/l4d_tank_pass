@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION "2.4"
+#define PLUGIN_VERSION "2.4.1"
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -15,12 +15,17 @@
 #include <l4d_lib>
 /*
 |--------------------------------------------------------------------------
+| MACROS
+|--------------------------------------------------------------------------
+*/
+#define IGNITE_TIME 3600.0
+#define FORWARD_ARGS "TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell
+#define SOURCEMOD_V_COMPAT (SOURCEMOD_V_MAJOR >= 1 && SOURCEMOD_V_MINOR >= 10 || SOURCEMOD_V_MAJOR > 2)
+/*
+|--------------------------------------------------------------------------
 | VARIABLES
 |--------------------------------------------------------------------------
 */
-#define IS_MUST_IGNITE(%1) (%1 && !g_bCvarFire && !g_bCvarExtinguish)
-#define IGNITE(%1) IgniteEntity(%1, 99999.0)
-
 enum
 {
 	Validate_Default,
@@ -35,8 +40,12 @@ enum
 	Menu_Take
 }
 
-int g_iCvarTankHealth, g_iCvarPassedCount, g_iTakeOverPassedCount, g_iTankId[MPS], g_iPassedCount[MPS];
+#if SOURCEMOD_V_COMPAT
 GlobalForward g_fwdOnTankPass;
+#else
+Handle g_fwdOnTankPass;
+#endif
+int g_iCvarTankHealth, g_iCvarPassedCount, g_iTakeOverPassedCount, g_iTankId[MPS], g_iPassedCount[MPS];
 char g_sCvarCmd[32];
 TopMenu g_hTopMenu;
 bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bCvarQuickPass, g_bCvarMenu, g_bIsFinale, g_bIsIgnited[MPS], g_bIsBlocked[MPS];
@@ -54,8 +63,11 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	// forward void TP_OnTankPass(int old_tank, int new_tank);
-	g_fwdOnTankPass = new GlobalForward("TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell);
-
+#if SOURCEMOD_V_COMPAT
+	g_fwdOnTankPass = new GlobalForward(FORWARD_ARGS);
+#else
+	g_fwdOnTankPass = CreateGlobalForward(FORWARD_ARGS);
+#endif
 	LoadTranslations("l4d_tank_pass.phrases");
 	LoadTranslations("common.phrases");
 
@@ -449,6 +461,7 @@ public void Event_RoundStart(Event h_Event, char[] s_Name, bool b_DontBroadcast)
 {
 	for (int i = 1; i <= MaxClients; i++)
 		ResetPassData(i);
+
 	g_bIsFinale = false;
 }
 
@@ -551,7 +564,7 @@ public void OnFrameIgnite(int client)
 {
 	client = CID(client);
 	if (IsValidTank(client))
-		IGNITE(client);
+		 IgniteEntity(client, IGNITE_TIME);
 }
 /*
 |--------------------------------------------------------------------------
@@ -572,10 +585,10 @@ void TankPass(int tank, int target, int admin = 0)
 	bool isOnFire = IsOnFire(tank);
 
 	if (g_bIsFinale || !g_bCvarQuickPass){
-		if (IS_MUST_IGNITE(isOnFire))
+		if (IsMustIgnite(isOnFire))
 			g_bIsIgnited[tank] = true;
 
-		if (!g_bCvarReplace && IsInfectedAlive(target) && !IsPlayerGhost(target))
+		if (!g_bCvarReplace && IsPlayerAlive(target) && !IsPlayerGhost(target))
 			ForcePlayerSuicide(target);
 
 		for (int i = 1; i <= MaxClients; i++)
@@ -587,7 +600,7 @@ void TankPass(int tank, int target, int admin = 0)
 		L4D2Direct_TryOfferingTankBot(tank, false);
 	}
 	else {
-		if (IsInfectedAlive(target) && !IsPlayerGhost(target)){
+		if (IsPlayerAlive(target) && !IsPlayerGhost(target)){
 
 			if (g_bCvarReplace)
 				L4D_ReplaceWithBot(target);
@@ -603,8 +616,8 @@ void TankPass(int tank, int target, int admin = 0)
 		SetPassCount(tank);
 		L4D_ReplaceTank(tank, target);
 
-		if (IS_MUST_IGNITE(isOnFire))
-			IGNITE(target);
+		if (IsMustIgnite(isOnFire))
+			IgniteEntity(target, IGNITE_TIME);
 	}
 
 	Call_StartForward(g_fwdOnTankPass);
@@ -721,6 +734,11 @@ bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, in
 	return true;
 }
 
+bool IsMustIgnite(bool ignited)
+{
+	return ignited && !g_bCvarFire && !g_bCvarExtinguish;
+}
+
 bool IsAllowToPass(int tank)
 {
 	return g_iPassedCount[tank] < g_iCvarPassedCount;
@@ -748,7 +766,7 @@ bool IsValidTankBot(int tank)
 
 bool IsAliveTank(int tank)
 {
-	return IsTank(tank) && IsInfectedAlive(tank);
+	return IsTank(tank) && IsPlayerAlive(tank);
 }
 
 bool IsTank(int tank)
