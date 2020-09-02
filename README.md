@@ -37,11 +37,19 @@ The plugin developed for [Left 4 Dead](http://www.l4d.com/blog/ "Left 4 Dead & L
     l4d_tank_pass_takeover "1"
     // "0=Off, 1=Display pass command info to the Tank through chat messages."
     l4d_tank_pass_notify "1"
+    // 0="X gets Tank" window, 1=Quick pass except finales
+    l4d_tank_pass_logic "1"
+    // 0=Off, 1=Display the menu when the Tank is spawned
+    l4d_tank_pass_menu "1"
+    // 0=Off, >0=The number of times the Tank can be passed by plugin (Frustration counts as pass).
+    l4d_tank_pass_count "1"
+    // 0=Off, 1=Ask the player if he wants to get the Tank.
+    l4d_tank_pass_confirm "1
 
 ## Сonsole Commands:
 
     // Player Commands:
-    sm_pass/sm_tankpass // Pass the Tank control to another player.
+    sm_pass/sm_tankpass/sm_passtank  // Pass the Tank control to another player.
     
     // Admin Commands (ADMFLAG_KICK):
     sm_forcepass <#userid|name> // Force to pass the Tank to target player.
@@ -70,6 +78,25 @@ If you want to thank me for the hard work feel free to [send any amount](https:/
 
 
 ## Changelog:
+v 2.5 (02 Aug Sep)
+- Added l4d_tank_pass_confirm convar.
+- Fixed a bug when it was impossible to pass the Tank to the dead infected if he playing as Tank before dying.
+
+v 2.4.1 (01 Aug Sep)
+- SM 1.9 compatibility.
+- Tidy up code.
+
+v 2.4 (30 Aug 2020)
+- Added third-party plugin support that's spawn tanks.
+- Added [nyxtools](https://github.com/JeremyDF93/nyxtools) extension compatibility.
+- Fixed a bug when passed count not transferred if the Tank left team.
+- Renamed some vars
+
+v 2.3 (27 Aug 2020)
+- Fixed a bug on finale!
+- Added more convars.
+- Remove unnecessary code.
+
 v 2.2 (01 Aug 2020)
  - Blocked sm_pass command on final stages.
  - Updated translations.
