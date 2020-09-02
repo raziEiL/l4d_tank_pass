@@ -44,7 +44,7 @@ The plugin developed for [Left 4 Dead](http://www.l4d.com/blog/ "Left 4 Dead & L
     // 0=Off, >0=The number of times the Tank can be passed by plugin (Frustration counts as pass).
     l4d_tank_pass_count "1"
     // 0=Off, 1=Ask the player if he wants to get the Tank.
-    l4d_tank_pass_confirm "1
+    l4d_tank_pass_confirm "1"
 
 ## Сonsole Commands:
 
