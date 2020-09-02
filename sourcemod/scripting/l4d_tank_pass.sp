@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION "2.4.1"
+#define PLUGIN_VERSION "2.5"
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -19,6 +19,7 @@
 |--------------------------------------------------------------------------
 */
 #define IGNITE_TIME 3600.0
+#define DISPLAY_TIME 10
 #define FORWARD_ARGS "TP_OnTankPass", ET_Ignore, Param_Cell, Param_Cell
 #define SOURCEMOD_V_COMPAT (SOURCEMOD_V_MAJOR >= 1 && SOURCEMOD_V_MINOR >= 10 || SOURCEMOD_V_MAJOR > 2)
 /*
@@ -37,6 +38,7 @@ enum
 {
 	Menu_Pass,
 	Menu_ForcePass,
+	Menu_ForceAdmPass,
 	Menu_Take
 }
 
@@ -48,7 +50,7 @@ Handle g_fwdOnTankPass;
 int g_iCvarTankHealth, g_iCvarPassedCount, g_iTakeOverPassedCount, g_iTankId[MPS], g_iPassedCount[MPS];
 char g_sCvarCmd[32];
 TopMenu g_hTopMenu;
-bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bCvarQuickPass, g_bCvarMenu, g_bIsFinale, g_bIsIgnited[MPS], g_bIsBlocked[MPS];
+bool g_bCvarDamage, g_bCvarFire, g_bCvarReplace, g_bCvarExtinguish, g_bCvarNotify, g_bCvarQuickPass, g_bCvarMenu, g_bCvarConfirm, g_bIsFinale, g_bIsIgnited[MPS], g_bIsBlocked[MPS];
 ConVar g_hCvarTankHealth, g_hCvarTankBonusHealth;
 
 public Plugin myinfo =
@@ -121,6 +123,10 @@ public void OnPluginStart()
 	g_iCvarPassedCount = cVar.IntValue;
 	cVar.AddChangeHook(OnCvarChange_PassCount);
 
+	cVar = CreateConVar("l4d_tank_pass_confirm", "1", "0=Off, 1=Ask the player if he wants to get the Tank.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_bCvarConfirm = cVar.BoolValue;
+	cVar.AddChangeHook(OnCvarChange_Confirm);
+
 	HookEvent("tank_spawn", Event_TankSpawn);
 	HookEvent("finale_start", Event_FinalStart, EventHookMode_PostNoCopy);
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
@@ -173,7 +179,7 @@ public void AdminMenu_ForcePass(TopMenu topmenu, TopMenuAction action, TopMenuOb
 		case TopMenuAction_SelectOption:
 		{
 			if (GetTank())
-				TankPassMenu(param, Menu_ForcePass);
+				TankPassMenu(param, Menu_ForceAdmPass);
 			else {
 				PrintToChat(param, "%t", "phrase7");
 				if (g_hTopMenu != null)
@@ -265,7 +271,7 @@ public int MenuTakeAdmHandler(Menu menu, MenuAction action, int admin, int param
 void PreTankPassMenu(int client)
 {
 	if (client && ValidateOffer(Validate_SkipTarget, client))
-		TankPassMenu(client);
+		TankPassMenu(client, g_bCvarConfirm ? Menu_Pass : Menu_ForcePass);
 }
 
 void TankPassMenu(int client, int menuType = Menu_Pass)
@@ -278,6 +284,8 @@ void TankPassMenu(int client, int menuType = Menu_Pass)
 		case Menu_Pass:
 			menu = new Menu(MenuPassHandler);
 		case Menu_ForcePass:
+			menu = new Menu(MenuForceHandler);
+		case Menu_ForceAdmPass:
 			menu = new Menu(MenuForceAdmHandler);
 		case Menu_Take:
 			menu = new Menu(MenuTakeAdmHandler);
@@ -286,8 +294,7 @@ void TankPassMenu(int client, int menuType = Menu_Pass)
 	menu.SetTitle("%T", "phrase4", client);
 	char sName[MAX_NAME_LENGTH], sId[12];
 	for (int i = 1; i <= MaxClients; i++){
-
-		if (!IsInfected(i) || IsFakeClient(i) || IsPlayerTank(i)) continue;
+		if (!IsValidTarget(i)) continue;
 
 		hasTarget = true;
 		GetClientName(i, SZF(sName));
@@ -300,10 +307,10 @@ void TankPassMenu(int client, int menuType = Menu_Pass)
 		delete menu;
 		return;
 	}
-	if (menuType == Menu_Pass){
+	if (menuType == Menu_Pass || menuType == Menu_ForcePass){
 		ExecCmd(client);
 		menu.ExitButton = true;
-		menu.Display(client, 10);
+		menu.Display(client, DISPLAY_TIME);
 	}
 	else {
 		menu.ExitBackButton = true;
@@ -311,6 +318,25 @@ void TankPassMenu(int client, int menuType = Menu_Pass)
 	}
 }
 
+public int MenuForceHandler(Menu menu, MenuAction action, int tank, int param2)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			char sId[12];
+			menu.GetItem(param2, SZF(sId));
+			int target = CID(StringToInt(sId));
+
+			if (ValidateOffer(Validate_Default, tank, target))
+				TankPass(tank, target);
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+}
 public int MenuPassHandler(Menu menu, MenuAction action, int tank, int param2)
 {
 	switch (action)
@@ -330,7 +356,7 @@ public int MenuPassHandler(Menu menu, MenuAction action, int tank, int param2)
 		}
 	}
 }
-// TODO: pass tankid via menu
+
 void OfferMenu(int tank, int target)
 {
 	g_iTankId[target] = UID(tank);
@@ -522,7 +548,7 @@ public void Event_PlayerBotReplace(Event h_Event, char[] s_Name, bool b_DontBroa
 	int client = CID(h_Event.GetInt("player"));
 	if (!g_iPassedCount[client]) return;
 	int bot = CID(h_Event.GetInt("bot"));
-	
+
 	if (IsReplaceableTank(bot, client))
 		TransferPass(client, bot);
 }
@@ -543,7 +569,7 @@ public void L4D_OnReplaceTank(int tank, int newtank)
 	OnReplaceTank(tank, newtank);
 }
 
-// support left4downtown, nyx extension 
+// support nyx extension
 public Action L4D2_OnReplaceTank(int tank, int newtank)
 {
 	OnReplaceTank(tank, newtank);
@@ -588,7 +614,7 @@ void TankPass(int tank, int target, int admin = 0)
 		if (IsMustIgnite(isOnFire))
 			g_bIsIgnited[tank] = true;
 
-		if (!g_bCvarReplace && IsPlayerAlive(target) && !IsPlayerGhost(target))
+		if (!g_bCvarReplace && IsReplaceableSI(target))
 			ForcePlayerSuicide(target);
 
 		for (int i = 1; i <= MaxClients; i++)
@@ -600,7 +626,7 @@ void TankPass(int tank, int target, int admin = 0)
 		L4D2Direct_TryOfferingTankBot(tank, false);
 	}
 	else {
-		if (IsPlayerAlive(target) && !IsPlayerGhost(target)){
+		if (IsReplaceableSI(target)){
 
 			if (g_bCvarReplace)
 				L4D_ReplaceWithBot(target);
@@ -733,7 +759,11 @@ bool ValidateOffer(int validate = Validate_Default, int tank, int target = 0, in
 	}
 	return true;
 }
-
+/*
+|--------------------------------------------------------------------------
+| CONDITION
+|--------------------------------------------------------------------------
+*/
 bool IsMustIgnite(bool ignited)
 {
 	return ignited && !g_bCvarFire && !g_bCvarExtinguish;
@@ -749,9 +779,14 @@ bool IsReplaceableTank(int client, int bot)
 	return IsClient(client) && IsClient(bot) && IsTank(client) && IsTank(bot);
 }
 
+bool IsReplaceableSI(int client)
+{
+	return IsPlayerAlive(client) && !IsPlayerGhost(client);
+}
+
 bool IsValidTarget(int target)
 {
-	return IsValid(target) && !IsPlayerTank(target);
+	return IsValid(target) && (!IsPlayerTank(target) || !IsPlayerAlive(target));
 }
 
 bool IsValidTank(int tank)
@@ -771,12 +806,12 @@ bool IsAliveTank(int tank)
 
 bool IsTank(int tank)
 {
-	return IsPlayerTank(tank) && !IsIncapacitated(tank);
+	return IsPlayerTank(tank) && !IsIncaped(tank);
 }
 
 bool IsValid(int client)
 {
-	return IsClient(client) && IsInfected(client) && !IsFakeClient(client);
+	return IsInfectedAndInGame(client) && !IsFakeClient(client);
 }
 /*
 |--------------------------------------------------------------------------
@@ -852,4 +887,10 @@ public void OnCvarChange_PassCount(ConVar convar, const char[] oldValue, const c
 {
 	if (!StrEqual(oldValue, newValue))
 		g_iCvarPassedCount = convar.IntValue;
+}
+
+public void OnCvarChange_Confirm(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	if (!StrEqual(oldValue, newValue))
+		g_bCvarConfirm = convar.BoolValue;
 }
