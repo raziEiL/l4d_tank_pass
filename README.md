@@ -73,6 +73,8 @@ The plugin developed for [Left 4 Dead](http://www.l4d.com/blog/ "Left 4 Dead & L
 If you want to thank me for the hard work feel free to [send any amount](https://www.paypal.me/razicat "send any amount").
 
 ## Changelog:
+[More changes](https://github.com/raziEiL/l4d_tank_pass/commits/master)  
+
 v 2.5 (02 Aug Sep)
 - Added l4d_tank_pass_confirm convar.
 - Fixed a bug when it was impossible to pass the Tank to the dead infected if he playing as Tank before dying.
